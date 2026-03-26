@@ -778,6 +778,44 @@ defmodule Provider.OpenAI.ResponsesAPIUnitTest do
 
       assert decoded_resp.body.provider_meta[:object_parse_error] == nil
     end
+
+    test "extracts structured output from tool call when text is empty (gpt-5.4 style)" do
+      schema = [name: [type: :string, required: true]]
+      {:ok, compiled_schema} = ReqLLM.Schema.compile(schema)
+
+      response_body = %{
+        "id" => "resp_123",
+        "model" => "gpt-5.4",
+        "output" => [
+          %{
+            "type" => "function_call",
+            "call_id" => "call_abc",
+            "name" => "structured_output",
+            "arguments" => ~s({"name": "Alice"})
+          }
+        ],
+        "usage" => %{"input_tokens" => 10, "output_tokens" => 20}
+      }
+
+      req = %Req.Request{
+        method: :post,
+        url: URI.parse("https://api.openai.com/v1/responses"),
+        headers: %{},
+        body: {:json, %{}},
+        options: %{
+          id: "gpt-5",
+          operation: :object,
+          compiled_schema: compiled_schema
+        }
+      }
+
+      resp = %Req.Response{status: 200, headers: %{}, body: response_body}
+
+      {_req, decoded_resp} = ResponsesAPI.decode_response({req, resp})
+
+      assert %ReqLLM.Response{} = decoded_resp.body
+      assert decoded_resp.body.object == %{"name" => "Alice"}
+    end
   end
 
   describe "decode_stream_event/2" do

@@ -1194,7 +1194,7 @@ defmodule ReqLLM.Providers.OpenAI.ResponsesAPI do
       metadata: %{response_id: body["id"]}
     }
 
-    {object, object_meta} = maybe_extract_object(req, text) || {nil, %{}}
+    {object, object_meta} = maybe_extract_object(req, text, tool_calls) || {nil, %{}}
 
     base_provider_meta = Map.drop(body, ["id", "model", "output_text", "output", "usage"])
     provider_meta = Map.merge(base_provider_meta, object_meta)
@@ -1221,7 +1221,7 @@ defmodule ReqLLM.Providers.OpenAI.ResponsesAPI do
   end
 
   # Extract and validate structured object from json_schema responses
-  defp maybe_extract_object(req, text) do
+  defp maybe_extract_object(req, text, tool_calls) do
     case {req.options[:operation], text} do
       {:object, text} when is_binary(text) and text != "" ->
         compiled_schema = req.options[:compiled_schema]
@@ -1241,7 +1241,11 @@ defmodule ReqLLM.Providers.OpenAI.ResponsesAPI do
         end
 
       {:object, _} ->
-        {nil, %{}}
+        # gpt-5 returns structured output as a tool call
+        case ReqLLM.ToolCall.find_args(tool_calls, "structured_output") do
+          nil -> {nil, %{}}
+          args -> {args, %{}}
+        end
 
       _ ->
         nil
